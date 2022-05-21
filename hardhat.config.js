@@ -4,6 +4,8 @@ require("@nomiclabs/hardhat-etherscan");
 require("@nomiclabs/hardhat-waffle");
 require("hardhat-gas-reporter");
 require("solidity-coverage");
+require("@nomiclabs/hardhat-ethers");
+require("hardhat-contract-sizer");
 
 // This is a sample Hardhat task. To learn how to create your own go to
 // https://hardhat.org/guides/create-task.html
@@ -23,7 +25,7 @@ task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
  */
 module.exports = {
   solidity: {
-    version: "0.8.4",
+    version: "0.8.9",
     settings: {
       optimizer: {
         enabled: true,
@@ -45,23 +47,23 @@ module.exports = {
           : [],
     },
     bscTestnet: {
-      url: "https://speedy-nodes-nyc.moralis.io/86519729daec0d9c5cb0fd8f/bsc/testnet",
-      accounts: { mnemonic: process.env.MNEMONIC },
+      url: "https://speedy-nodes-nyc.moralis.io/36aa7f475186f430dae80641/bsc/testnet",
+      network_id: 97,
+      skipDryRun: true,
+      accounts: { mnemonic: process.env.MNEMONIC }
     },
-    // testnet: {
-    //   url: `https://data-seed-prebsc-1-s1.binance.org:8545`,
-    //   accounts: { mnemonic: process.env.MNEMONIC },
-    //   network_id: 97,
-    //   confirmations: 10,
-    //   timeoutBlocks: 200,
-    //   skipDryRun: true,
-    // },
-    // mainnet: {
-    //   url: "https://bsc-dataseed.binance.org/",
-    //   chainId: 56,
-    //   gasPrice: 20000000000,
-    //   accounts: { mnemonic: process.env.PRODUCTION_MNEMONIC },
-    // },
+    ropsten: {
+      url: `https://speedy-nodes-nyc.moralis.io/86519729daec0d9c5cb0fd8f/eth/ropsten`,
+      accounts: [
+        "b2823d774710b99f4c887d1e71b0ce15eee0d32b3d4bde71fbaa6f27fac3406d",
+      ],
+    },
+    mainnet: {
+      url: "https://speedy-nodes-nyc.moralis.io/36aa7f475186f430dae80641/bsc/mainnet",
+      chainId: 56,
+      gasPrice: 20000000000,
+      accounts: { mnemonic: process.env.PRODUCTION_MNEMONIC },
+    },
   },
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,

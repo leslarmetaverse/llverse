@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "../core/Tokenomics.sol";
-import "../core/Pancake.sol";
-import "hardhat/console.sol";
-abstract contract RFI is IERC20, Ownable, Tokenomics, Pancake {
+
+abstract contract RFI is IERC20, Ownable, Tokenomics {
 	using SafeMath for uint256;
 	uint256 public taxBuy = 3;
     uint256 public taxSell = 3;
@@ -34,17 +33,29 @@ abstract contract RFI is IERC20, Ownable, Tokenomics, Pancake {
 		emit Transfer(address(0), _msgSender(), _tTotal);
 	}
 
+	/**
+	* @notice External function allowing owner toggle any address as special address.
+	*/
+	function toggleSpecialWallets(address specialAddr, bool toggle) 
+		external 
+		onlyOwner 
+	{
+		specialAddresses[specialAddr] = toggle;
+	}
+
+/* --------------------------- TAX -------------------------- */
+
 	 //Set tax buy on percent
 	function setTaxBuy(uint256 _percent)external onlyOwner{
 		require(_percent <= 90, "Should be lower than 90%");
 		taxBuy = _percent;
 	}
+
 	//Set tax sale on percent
 	function setTaxSell(uint256 _percent)external onlyOwner{
 		require(_percent <= 90, "Should be lower than 90%");
 		taxSell = _percent;
 	}
-
 
 	function _getValues(
 		uint256 tAmount,
@@ -162,6 +173,8 @@ abstract contract RFI is IERC20, Ownable, Tokenomics, Pancake {
 		address to,
 		uint256 amount
 	) internal {
+		// To flag the address is bot or not
+		require(!isBot(msg.sender), "Bot account has been detected, contact admin for further information");
 		require(from != address(0), "ERC20: transfer from the zero address");
 		require(to != address(0), "ERC20: transfer to the zero address");
 		require(amount > 0, "Transfer amount must be greater than zero");
@@ -229,6 +242,22 @@ abstract contract RFI is IERC20, Ownable, Tokenomics, Pancake {
 
 
 		return true;
+	}
+
+/* ---------------------------------- Fees ---------------------------------- */
+
+	function canTakeFee(address from, address to) 
+		internal view returns(bool) 
+	{	
+		bool take = true;
+		if (
+			limitExemptions[from].fees 
+			|| limitExemptions[to].fees 
+			|| specialAddresses[from] 
+			|| specialAddresses[to]
+		) { take = false; }
+
+		return take;
 	}
 
 /* ------------------------------- Custom fees ------------------------------ */
@@ -336,4 +365,5 @@ abstract contract RFI is IERC20, Ownable, Tokenomics, Pancake {
 			);
 		_;
 	}
+
 }

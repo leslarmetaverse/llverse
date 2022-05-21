@@ -1,11 +1,11 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.9;
 
 //    __   __________   ___   ___ 
 //   / /  / __/ __/ /  / _ | / _ \
 //  / /__/ _/_\ \/ /__/ __ |/ , _/
 // /____/___/___/____/_/ |_/_/|_| 
-// LESLAR METAVERSE
+// LESLARVERSE
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
@@ -15,17 +15,13 @@ import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "./abstracts/core/Tokenomics.sol";
 import "./abstracts/core/RFI.sol";
 import "./abstracts/features/Expensify.sol";
-import "./abstracts/features/TxPolice.sol";
-import "./abstracts/core/Pancake.sol";
-import "./abstracts/helpers/Helpers.sol";
 
-contract LESLAR is 
+contract LESLARVERSE is 
 	IERC20Metadata, 
 	Context, 
 	Ownable,
 	Tokenomics, 
 	RFI,
-	TxPolice,
 	Expensify
 {
 	using SafeMath for uint256;
@@ -48,6 +44,12 @@ contract LESLAR is
 	function symbol() external pure override returns(string memory) { return SYMBOL;}
 	function decimals() external pure override returns(uint8) { return DECIMALS; }	
 
+/* ---------------------------------- Circulating Supply ---------------------------------- */
+
+	function totalCirculatingSupply() public view returns(uint256) {
+		return _tTotal.sub(balanceOf(deadAddr));
+	}
+
 /* -------------------------------- Overrides ------------------------------- */
 
 	function beforeTokenTransfer(address from, address to, uint256 amount) 
@@ -69,11 +71,6 @@ contract LESLAR is
 
 /* -------------------------- Accumulator Triggers -------------------------- */
 
-	// Will keep track of how often each trigger has been called already.
-	uint256 internal triggerCount = 0;
-	// Will keep track of trigger indexes, which can be triggered during current tx.
-	uint8 internal canTrigger = 0;
-
 	/**
 	* @notice Convenience wrapper function which tries to trigger our custom 
 	* features.
@@ -82,16 +79,11 @@ contract LESLAR is
 		uint256 contractTokenBalance = balanceOf(address(this));
 		// First determine which triggers can be triggered.
 		if (!liquidityPools[from]) {
-			if (canTax(contractTokenBalance)) {
-				canTrigger = 1;
-			}
-		}
-
-		// Avoid falling into a tx loop.
-		if (!inTriggerProcess) {
-			if (canTax(contractTokenBalance)) {
-				_triggerTax();
-				delete canTrigger;
+			// Avoid falling into a tx loop.
+			if (!inTriggerProcess) {
+				if (canTax(contractTokenBalance)) {
+					_triggerTax();
+				}
 			}
 		}
 	}
@@ -103,7 +95,6 @@ contract LESLAR is
 	*/
 	function _triggerTax() internal {
 		taxify(accumulatedForTax);
-		triggerCount = triggerCount.add(1);
 	}
 
 /* ---------------------------- External Triggers --------------------------- */

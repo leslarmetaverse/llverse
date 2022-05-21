@@ -1,26 +1,24 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "../helpers/Helpers.sol";
-import "../core/Pancake.sol";
 import "../core/Tokenomics.sol";
-import "../features/TxPolice.sol";
+import "../core/RFI.sol";
 
-abstract contract Expensify is Ownable, Helpers, Tokenomics, Pancake, TxPolice {
+abstract contract Expensify is Ownable, Tokenomics, RFI {
 	using SafeMath for uint256;
 	address public buybackWallet;
 	address public treasuryWallet;
 	address public marketingWallet;
 	// Expenses fee accumulated amount will be divided using these.
-	uint256 public buybackShare = 30; // 30%
-	uint256 public treasuryShare = 30; // 30%
-	uint256 public marketingShare = 40; // 40%
+	uint256 public buybackShare = 33; // 33%
+	uint256 public treasuryShare = 33; // 33%
+	uint256 public marketingShare = 34; // 34%
 
 	/**
-	* @notice External function allowing to set/change product dev wallet.
-	* @param wallet: this wallet will receive product dev share.
+	* @notice External function allowing to set/change buyback wallet.
+	* @param wallet: this wallet will receive buyback share.
 	* @param share: multiplier will be divided by 100. 30 -> 30%, 3 -> 3% etc.
 	*/
 	function setBuybackWallet(address wallet, uint256 share) 
@@ -32,8 +30,8 @@ abstract contract Expensify is Ownable, Helpers, Tokenomics, Pancake, TxPolice {
 	}
 
 	/**
-	* @notice External function allowing to set/change dev wallet.
-	* @param wallet: this wallet will receive dev share.
+	* @notice External function allowing to set/change treasury wallet.
+	* @param wallet: this wallet will receive treasury share.
 	* @param share: multiplier will be divided by 100. 30 -> 30%, 3 -> 3% etc.
 	*/
 	function setTreasuryWallet(address wallet, uint256 share) 
@@ -120,4 +118,13 @@ abstract contract Expensify is Ownable, Helpers, Tokenomics, Pancake, TxPolice {
 		uint256 tokensSentToTreasury,
 		uint256 tokensSentToMarketing
 	);
+
+
+/* -------------------------------- Modifiers ------------------------------- */
+
+	modifier legitWallet(address wallet) {
+		require(wallet != address(0), "Wallet address must be set!");
+		require(wallet != address(this), "Wallet address can't be this contract.");
+		_;
+	}
 }

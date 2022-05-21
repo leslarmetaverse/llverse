@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.9;
 
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -8,6 +8,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 abstract contract Tokenomics is IERC20, Ownable {
 	using SafeMath for uint256;
     mapping (address => bool) private _isBot;
+
+	// Global toggle to avoid trigger loops
+	bool internal inTriggerProcess;
 
 /* ---------------------------------- Token --------------------------------- */
 
@@ -22,6 +25,57 @@ abstract contract Tokenomics is IERC20, Ownable {
 	uint256 internal _rTotal = (MAX - (MAX % _tTotal));
 
 	address public deadAddr = 0x000000000000000000000000000000000000dEaD;
+
+/* ---------------------------------- EXEMPTION --------------------------------- */
+
+	// Sometimes you just have addresses which should be exempt from any 
+	// limitations and fees.
+	mapping(address => bool) public specialAddresses;
+
+	// Toggle multiple exemptions from transaction limits.
+	struct LimitExemptions {
+		bool fees;
+	}
+
+	// Keeps a record of addresses with limitation exemptions
+	mapping(address => LimitExemptions) internal limitExemptions;
+
+/* ---------------------------------- Transactions ---------------------------------- */
+
+	// To keep track of all LPs.
+	mapping(address => bool) public liquidityPools;
+
+	// Convenience enum to differentiate transaction limit types.
+	enum TransactionLimitType { TRANSACTION, WALLET, SELL }
+	// Convenience enum to differentiate transaction types.
+	enum TransactionType { REGULAR, SELL, BUY }
+
+	/**
+	* @notice Adds address to a liquidity pool map. Can be called externaly.
+	*/
+	function addAddressToLPs(address lpAddr) public onlyOwner {
+		liquidityPools[lpAddr] = true;
+	}
+
+	/**
+	* @notice Removes address from a liquidity pool map. Can be called externaly.
+	*/
+	function removeAddressFromLPs(address lpAddr) public onlyOwner {
+		liquidityPools[lpAddr] = false;
+	}
+
+	function getTransactionType(address from, address to) 
+		internal view returns(TransactionType)
+	{
+		if (liquidityPools[from] && !liquidityPools[to]) {
+			// LP -> addr
+			return TransactionType.BUY;
+		} else if (!liquidityPools[from] && liquidityPools[to]) {
+			// addr -> LP
+			return TransactionType.SELL;
+		}
+		return TransactionType.REGULAR;
+	}
 
 /* ---------------------------------- Fees ---------------------------------- */
 	uint256 internal _tFeeTotal;
@@ -83,7 +137,7 @@ abstract contract Tokenomics is IERC20, Ownable {
 	 * so it can be reinstated later.
 	 */
 	function removeAllFee() internal {
-		if (_taxFee == 0) return;
+		if (_reflectionFee == 0 && _taxFee == 0) return;
 
 		_previousTaxFee = _taxFee;
 		_previousReflectionFee = _reflectionFee;
@@ -113,6 +167,34 @@ abstract contract Tokenomics is IERC20, Ownable {
 		return amount.mul(_reflectionFee).mul(multiplier).div(10 ** 2);
 	}
 
+/* --------------------------- Exemption Utilities -------------------------- */
+
+	/**
+	* @notice External function allowing owner to toggle various limit exemptions
+	* for any address.
+	*/
+	function toggleLimitExemptions(
+		address addr, 
+		bool feesToggle
+	) 
+		public 
+		onlyOwner
+	{
+		LimitExemptions memory ex = limitExemptions[addr];
+		ex.fees = feesToggle;
+		limitExemptions[addr] = ex;
+	}
+
+	/**
+	* @notice Updates old and new wallet fee exemptions.
+	*/
+	function swapExcludedFromFee(address newWallet, address oldWallet) internal {
+		if (oldWallet != address(0)) {
+			toggleLimitExemptions(oldWallet, false);
+		}
+		toggleLimitExemptions(newWallet, true);
+	}
+
 /* --------------------------- Triggers and limits -------------------------- */
 
 	// One contract accumulates 0.01% of total supply, trigger tax wallet sendout.
@@ -127,7 +209,7 @@ abstract contract Tokenomics is IERC20, Ownable {
 		onlyOwner 
 		supplyBounds(minTokens)
 	{
-		minToTax = minTokens * 10 ** 5;
+		minToTax = minTokens * 10 ** 9;
 	}
 
 /* --------------------------------- IERC20 --------------------------------- */
@@ -150,7 +232,7 @@ abstract contract Tokenomics is IERC20, Ownable {
         return _isBot[account];
     }
 
-/* -------------------------------- Modifiers ------------------------------- */
+/* -------------------------------- Helpers ------------------------------- */
 
     // Use this in case BNB are sent to the contract by mistake
     function rescueBNB(uint256 weiAmount) external onlyOwner{
@@ -158,20 +240,31 @@ abstract contract Tokenomics is IERC20, Ownable {
         payable(msg.sender).transfer(weiAmount);
     }
 
-    function rescueBEP20Tokens(address tokenAddress) external onlyOwner{
+    function rescueBEP20Tokens(address tokenAddress) external lockTheProcess onlyOwner{
         IERC20(tokenAddress).transfer(msg.sender, IERC20(tokenAddress).balanceOf(address(this)));
+		if(tokenAddress == address(this)) {
+			// Reset the accumulator, only if tokens actually sent, otherwise we keep
+			// acumulating until above mentioned things are fixed.
+			accumulatedForTax = 0;
+		}
     }
 
 /* -------------------------------- Modifiers ------------------------------- */
 
 	modifier supplyBounds(uint256 minTokens) {
-		require(minTokens * 10 ** 5 > 0, "Amount must be more than 0");
-		require(minTokens * 10 ** 5 <= _tTotal, "Amount must be not bigger than total supply");
+		require(minTokens * 10 ** 9 > 0, "Amount must be more than 0");
+		require(minTokens * 10 ** 9 <= _tTotal, "Amount must be not bigger than total supply");
 		_;
 	}
 
 	modifier sameValue(uint256 firstValue, uint256 secondValue) {
 		require(firstValue != secondValue, "Already set to this value.");
 		_;
+	}
+
+	modifier lockTheProcess {
+		inTriggerProcess = true;
+		_;
+		inTriggerProcess = false;
 	}
 }
